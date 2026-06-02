@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>現場写真安全チェック補助アプリ</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+            background: #f0f4f8;
+            color: #1a202c;
+            min-height: 100vh;
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+        .header {
+            background: linear-gradient(135deg, #1a365d 0%, #2b6cb0 100%);
+            color: white;
+            padding: 16px 20px;
+            text-align: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+        .header h1 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+        .header .subtitle { font-size: 11px; opacity: 0.85; }
+        .badge {
+            display: inline-block;
+            background: #48bb78;
+            color: white;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 10px;
+            margin-top: 4px;
+        }
+        .container { max-width: 600px; margin: 0 auto; padding: 16px; }
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+        }
+        .step-label {
+            display: flex; align-items: center; gap: 8px;
+            font-size: 15px; font-weight: 700; color: #1a365d; margin-bottom: 12px;
+        }
+        .step-num {
+            background: #2b6cb0;
+            color: white;
+            width: 24px; height: 24px;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 13px; font-weight: 800;
+        }
+        input[type="text"], input[type="password"], textarea, select {
+            width: 100%;
+            padding: 12px 14px;
+            border: 1.5px solid #d2d6dc;
+            border-radius: 8px;
+            font-size: 15px;
+            transition: border-color 0.2s;
+        }
+        input:focus, textarea:focus, select:focus { border-color: #2b6cb0; outline: none; }
+        textarea { resize: vertical; min-height: 60px; font-family: monospace; font-size: 12px; }
+        label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #4a5568; }
+        .camera-area {
+            border: 2px dashed #cbd5e0;
+            border-radius: 12px;
+            padding: 24px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: #f7fafc;
+        }
+        .camera-area:active { background: #edf2f7; border-color: #2b6cb0; }
+        .camera-area .icon { font-size: 36px; margin-bottom: 8px; }
+        .camera-area .text { font-size: 13px; color: #718096; }
+        .gallery-btn {
+            display: flex; align-items: center; justify-content: center; gap: 6px;
+            margin-top: 10px; padding: 10px;
+            background: #edf2f7; border-radius: 8px;
+            font-size: 13px; color: #4a5568; cursor: pointer;
+        }
+        .gallery-btn:active { background: #e2e8f0; }
+        .preview-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .preview-item {
+            position: relative;
+            aspect-ratio: 1;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .preview-item img { width: 100%; height: 100%; object-fit: cover; }
+        .preview-item .remove {
+            position: absolute; top: 2px; right: 2px;
+            background: rgba(0,0,0,0.6); color: white;
+            width: 20px; height: 20px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 12px; cursor: pointer;
+        }
+        .btn-primary {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #2b6cb0 0%, #3182ce 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-primary:active { transform: scale(0.98); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+        .result-section { margin-top: 16px; }
+        .result-card {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+            border-left: 4px solid #48bb78;
+        }
+        .result-card.warn { border-left-color: #ed8936; }
+        .result-card.danger { border-left-color: #f56565; }
+        .result-card.info { border-left-color: #4299e1; }
+        .result-header {
+            display: flex; align-items: center; gap: 8px;
+            font-weight: 700; font-size: 14px; margin-bottom: 8px;
+        }
+        .result-body { font-size: 13px; line-height: 1.6; color: #4a5568; }
+        .result-body ul { padding-left: 16px; margin-top: 4px; }
+        .result-body li { margin-bottom: 4px; }
+        .loading { text-align: center; padding: 40px; }
+        .loading .spinner {
+            width: 40px; height: 40px;
+            border: 4px solid #e2e8f0;
+            border-top-color: #2b6cb0;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 12px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .collapsible-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 12px 0; cursor: pointer; font-weight: 600; font-size: 14px;
+        }
+        .collapsible-content { display: none; padding-top: 8px; }
+        .collapsible-content.open { display: block; }
+        .category-list { list-style: none; }
+        .category-list li {
+            padding: 8px 12px;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 13px;
+        }
+        .category-list li:last-child { border-bottom: none; }
+        .status-bar {
+            display: flex; align-items: center; gap: 8px;
+            padding: 8px 12px;
+            background: #f0fff4;
+            border-radius: 8px;
+            font-size: 12px;
+            color: #276749;
+            margin-top: 12px;
+        }
+        .status-bar.error { background: #fff5f5; color: #c53030; }
+        .team-info {
+            display: flex; align-items: center; gap: 6px;
+            font-size: 11px; color: #718096;
+            margin-top: 8px;
+        }
+        .summary-score {
+            text-align: center;
+            padding: 20px;
+            background: linear-gradient(135deg, #f0fff4 0%, #e6fffa 100%);
+            border-radius: 12px;
+            margin-bottom: 16px;
+        }
+        .summary-score.caution {
+            background: linear-gradient(135deg, #fffaf0 0%, #fff5f5 100%);
+        }
+        .score-number { font-size: 48px; font-weight: 800; color: #276749; }
+        .summary-score.caution .score-number { color: #c05621; }
+        .score-label { font-size: 13px; color: #4a5568; margin-top: 4px; }
+        .footer {
+            text-align: center;
+            padding: 20px;
+            font-size: 11px;
+            color: #a0aec0;
+        }
+        .config-status {
+            display: flex; align-items: center; gap: 6px;
+            padding: 10px 14px;
+            background: #f7fafc;
+            border-radius: 8px;
+            font-size: 12px;
+            margin-top: 8px;
+        }
+        .config-status.ok { color: #276749; background: #f0fff4; }
+        .config-status.ng { color: #c53030; background: #fff5f5; }
+        .help-text { font-size: 11px; color: #718096; margin-top: 4px; line-height: 1.5; }
+        .key-count { 
+            font-size: 12px; color: #2b6cb0; margin-top: 6px; font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🏗️ 現場写真安全チェック補助アプリ</h1>
+        <div class="subtitle">2025年版 工事安全ルールブック準拠</div>
+        <div class="badge">オンライン・スマートフォン対応</div>
+    </div>
+
+    <div class="container">
+        <!-- 設定セクション（現場名のみ・任意） -->
+        <div class="card" id="configCard">
+            <div class="collapsible-header" onclick="toggleSection('configSection')">
+                <span>📍 現場名の設定（任意）</span>
+                <span id="configArrow">▶</span>
+            </div>
+            <div class="collapsible-content" id="configSection">
+                <div style="margin-bottom:12px">
+                    <label>現場名（任意・記録用）</label>
+                    <input type="text" id="siteName" placeholder="例：○○ビル新築工事">
+                </div>
+                <button class="btn-primary" onclick="saveConfig()">保存</button>
+                <div id="configStatus" class="config-status" style="display:none"></div>
+                <div class="team-info">
+                    👥 チーム35名共有 ｜ APIキーは内蔵済み・入力不要
+                </div>
+            </div>
+        </div>
+
+        <!-- 写真撮影セクション -->
+        <div class="card">
+            <div class="step-label">
+                <span class="step-num">1</span>
+                現場写真を撮影・選択
+            </div>
+
+            <div class="camera-area" onclick="document.getElementById('cameraInput').click()">
+                <div class="icon">📷</div>
+                <div class="text">タップしてカメラで撮影<br>保護具・区画・高所作業などが写るように撮影してください（最大8枚）</div>
+            </div>
+            <input type="file" id="cameraInput" accept="image/*" capture="environment" multiple style="display:none" onchange="handleFiles(this.files)">
+
+            <div class="gallery-btn" onclick="document.getElementById('galleryInput').click()">
+                🖼️ ギャラリーから選択
+            </div>
+            <input type="file" id="galleryInput" accept="image/*" multiple style="display:none" onchange="handleFiles(this.files)">
+
+            <div class="preview-grid" id="previewGrid"></div>
+        </div>
+
+        <!-- チェック実行 -->
+        <div class="card">
+            <div class="step-label">
+                <span class="step-num">2</span>
+                安全チェックを実行
+            </div>
+            <button class="btn-primary" id="checkBtn" onclick="runSafetyCheck()" disabled>
+                🔍 安全チェックを実行
+            </button>
+            <div id="statusBar" class="status-bar" style="display:none"></div>
+        </div>
+
+        <!-- 結果表示 -->
+        <div id="resultArea" class="result-section" style="display:none"></div>
+
+        <!-- チェック対象カテゴリ -->
+        <div class="card">
+            <div class="collapsible-header" onclick="toggleSection('categorySection')">
+                <span>📋 チェック対象の安全項目（9カテゴリ）</span>
+                <span id="categoryArrow">▶</span>
+            </div>
+            <div class="collapsible-content" id="categorySection">
+                <ul class="category-list">
+                    <li>1️⃣ 保護具の着用状況（ヘルメット・安全帯・安全靴等）</li>
+                    <li>2️⃣ 足場・作業床の安全性（手すり・幅木・昇降設備）</li>
+                    <li>3️⃣ 開口部・端部の防護措置（手すり・覆い・表示）</li>
+                    <li>4️⃣ 重機・クレーン作業の安全対策</li>
+                    <li>5️⃣ 電気工事の安全措置（絶縁・接地・表示）</li>
+                    <li>6️⃣ 火気使用作業の安全対策（消火器・養生）</li>
+                    <li>7️⃣ 仮設設備の安全性（仮設電気・照明・通路）</li>
+                    <li>8️⃣ 整理整頓・通路確保・表示類</li>
+                    <li>9️⃣ 第三者災害防止措置（仮囲い・誘導員・表示）</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 免責事項 -->
+        <div class="card" style="background:#fffaf0; border:1px solid #fbd38d;">
+            <p style="font-size:12px; color:#744210; line-height:1.6;">
+                ⚠️ 本アプリはAIによる一次スクリーニング支援ツールです。写真に写る範囲のみを評価するため、写っていない事項・現地でしか判断できない事項（資格保有、許可証の有効性、強度計算等）は判定できません。最終的な合否判断は現場代理人・有資格者が行い、正式な安全パトロールの代替とはしないでください。
+            </p>
+        </div>
+
+        <div class="footer">
+            Amazon Construction Safety Rule Book 2025 準拠チェッカー（チーム共有版）<br>
+            画像はAI解析にのみ使用され、サーバーには保存されません<br>
+            <span style="color:#2b6cb0">Google Gemini API 無料枠利用 ─ 追加費用ゼロ</span>
+        </div>
+    </div>
+
+    <script>
+    // ===== 内蔵 APIキー（チーム共有・入力不要） =====
+    // チーム利用回数が増えた場合は、ここに追加のキーをカンマ区切りで足してください。
+    // 例: const EMBEDDED_API_KEYS = ['AIza...1', 'AIza...2', 'AIza...3'];
+    const EMBEDDED_API_KEYS = [
+        'AIzaSyAb5TEy5WNCin4vBDYadDRt4ejlgGhvjQs'
+    ];
+
+    // ===== 設定管理 =====
+    const CONFIG_KEY = 'safety_checker_gemini_v2';
+    let selectedImages = [];
+    let keyRotationIndex = 0;
+
+    function loadConfig() {
+        const saved = localStorage.getItem(CONFIG_KEY);
+        if (saved) {
+            const config = JSON.parse(saved);
+            document.getElementById('siteName').value = config.siteName || '';
+        }
+        // 設定セクションは初期状態で折りたたみ（APIキー入力が不要になったため）
+        document.getElementById('configSection').classList.remove('open');
+        document.getElementById('configArrow').textContent = '▶';
+    }
+
+    function saveConfig() {
+        const siteName = document.getElementById('siteName').value.trim();
+        localStorage.setItem(CONFIG_KEY, JSON.stringify({ siteName }));
+        showConfigStatus(true, '現場名を保存しました ✓');
+    }
+
+    function showConfigStatus(ok, msg) {
+        const el = document.getElementById('configStatus');
+        el.style.display = 'flex';
+        el.className = 'config-status ' + (ok ? 'ok' : 'ng');
+        el.textContent = msg || (ok ? '✓ 設定済み' : '✗ 未設定');
+    }
+
+    function getConfig() {
+        const saved = localStorage.getItem(CONFIG_KEY);
+        const base = saved ? JSON.parse(saved) : {};
+        // APIキーは常に内蔵キーを使用
+        base.apiKeys = EMBEDDED_API_KEYS;
+        return base;
+    }
+
+    // APIキーのローテーション（レート制限対策・複数キー登録時）
+    function getNextApiKey() {
+        if (!EMBEDDED_API_KEYS || EMBEDDED_API_KEYS.length === 0) return null;
+        const idx = keyRotationIndex % EMBEDDED_API_KEYS.length;
+        keyRotationIndex = idx + 1;
+        return EMBEDDED_API_KEYS[idx];
+    }
+
+    // ===== セクション開閉 =====
+    function toggleSection(id) {
+        const el = document.getElementById(id);
+        const isOpen = el.classList.toggle('open');
+        const arrowId = id.replace('Section', 'Arrow');
+        const arrow = document.getElementById(arrowId);
+        if (arrow) arrow.textContent = isOpen ? '▼' : '▶';
+    }
+
+    // ===== 画像処理 =====
+    function handleFiles(files) {
+        const maxImages = 8;
+        for (let i = 0; i < files.length && selectedImages.length < maxImages; i++) {
+            const file = files[i];
+            if (!file.type.startsWith('image/')) continue;
+            selectedImages.push(file);
+        }
+        updatePreview();
+        updateCheckButton();
+    }
+
+    function updatePreview() {
+        const grid = document.getElementById('previewGrid');
+        grid.innerHTML = '';
+        selectedImages.forEach((file, idx) => {
+            const div = document.createElement('div');
+            div.className = 'preview-item';
+            const img = document.createElement('img');
+            img.src = URL.createObjectURL(file);
+            const remove = document.createElement('div');
+            remove.className = 'remove';
+            remove.textContent = '✕';
+            remove.onclick = (e) => { e.stopPropagation(); removeImage(idx); };
+            div.appendChild(img);
+            div.appendChild(remove);
+            grid.appendChild(div);
+        });
+    }
+
+    function removeImage(idx) {
+        selectedImages.splice(idx, 1);
+        updatePreview();
+        updateCheckButton();
+    }
+
+    function updateCheckButton() {
+        const btn = document.getElementById('checkBtn');
+        // APIキーは内蔵済みなので、写真が選択されていれば実行可能
+        btn.disabled = !(selectedImages.length > 0);
+    }
+
+    // ===== 画像をBase64に変換 =====
+    function imageToBase64(file, maxWidth = 1024) {
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    let w = img.width, h = img.height;
+                    if (w > maxWidth) { h = h * maxWidth / w; w = maxWidth; }
+                    canvas.width = w; canvas.height = h;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, w, h);
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+                    resolve(dataUrl.split(',')[1]);
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // ===== 安全チェック実行 =====
+    async function runSafetyCheck() {
+        const config = getConfig();
+        if (!EMBEDDED_API_KEYS || EMBEDDED_API_KEYS.length === 0) {
+            alert('APIキーが内蔵されていません。管理者に連絡してください。');
+            return;
+        }
+        if (selectedImages.length === 0) {
+            alert('写真を1枚以上選択してください');
+            return;
+        }
+
+        const btn = document.getElementById('checkBtn');
+        const statusBar = document.getElementById('statusBar');
+        const resultArea = document.getElementById('resultArea');
+
+        btn.disabled = true;
+        btn.textContent = '解析中...';
+        statusBar.style.display = 'flex';
+        statusBar.className = 'status-bar';
+        statusBar.textContent = '🔄 AI で画像を解析中... (10〜30秒)';
+        resultArea.style.display = 'none';
+
+        try {
+            // 画像をBase64に変換
+            const imageParts = [];
+            for (const file of selectedImages) {
+                const base64 = await imageToBase64(file);
+                imageParts.push({
+                    inlineData: { mimeType: 'image/jpeg', data: base64 }
+                });
+            }
+
+            const siteName = config.siteName || '(未設定)';
+            const prompt = buildSafetyPrompt(siteName, selectedImages.length);
+
+            // Gemini API 呼び出し（ローテーション付きリトライ）
+            let result = null;
+            let lastError = null;
+            const maxRetries = Math.min(EMBEDDED_API_KEYS.length, 3);
+
+            for (let attempt = 0; attempt < maxRetries; attempt++) {
+                const apiKey = getNextApiKey();
+                try {
+                    result = await callGeminiAPI(apiKey, imageParts, prompt);
+                    break;
+                } catch (err) {
+                    lastError = err;
+                    if (err.message.includes('429') || err.message.includes('quota')) {
+                        statusBar.textContent = `🔄 キー${attempt+1}がレート制限中、次のキーで再試行...`;
+                        continue;
+                    }
+                    throw err;
+                }
+            }
+
+            if (!result) {
+                throw lastError || new Error('全てのAPIキーがレート制限に達しています。しばらく待ってから再試行してください。');
+            }
+
+            displayResults(result);
+            statusBar.className = 'status-bar';
+            statusBar.textContent = '✅ 解析完了';
+
+        } catch (error) {
+            statusBar.className = 'status-bar error';
+            statusBar.textContent = '❌ エラー: ' + error.message;
+            console.error('Safety check error:', error);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '🔍 安全チェックを実行';
+        }
+    }
+
+    // ===== Gemini API 呼び出し =====
+    async function callGeminiAPI(apiKey, imageParts, prompt) {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+
+        const requestBody = {
+            contents: [{
+                parts: [
+                    ...imageParts,
+                    { text: prompt }
+                ]
+            }],
+            generationConfig: {
+                temperature: 0.1,
+                maxOutputTokens: 4096,
+                responseMimeType: "application/json"
+            }
+        };
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody)
+        });
+
+        if (!response.ok) {
+            const errBody = await response.text();
+            throw new Error(`API Error ${response.status}: ${errBody}`);
+        }
+
+        const data = await response.json();
+        const text = data.candidates[0].content.parts[0].text;
+
+        try {
+            return JSON.parse(text);
+        } catch {
+            // JSONパースに失敗した場合、テキストからJSON部分を抽出
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+            if (jsonMatch) return JSON.parse(jsonMatch[0]);
+            return { raw_response: text };
+        }
+    }
+
+    // ===== プロンプト構築（Amazon工事安全ルールブック2025準拠） =====
+    function buildSafetyPrompt(siteName, imageCount) {
+        return `あなたは建設現場の安全管理の専門家です。「Amazon工事安全ルールブック2025」に基づいて、提供された${imageCount}枚の現場写真を分析し、安全状態を評価してください。
+
+【現場名】${siteName}
+
+【準拠基準】Amazon工事安全ルールブック2025
+このルールブックは以下の基本方針に基づいています：
+- 安全はすべてに優先する
+- 法令・社内基準の遵守
+- リスクアセスメントの実施
+- 安全教育の徹底
+- 5S活動の推進（整理・整頓・清掃・清潔・躾）
+
+【評価基準 - 9カテゴリ】
+
+1. 保護具の着用状況
+   - ヘルメット（あごひも確実に締める）
+   - フルハーネス型墜落制止用器具（高さ2m以上）
+   - 安全靴（つま先保護・滑り止め）
+   - 保護メガネ・防塵マスク（粉塵作業時）
+   - 作業に適した服装（長袖・長ズボン、ダブつきなし）
+
+2. 足場・作業床の安全性
+   - 手すり（高さ85cm以上）・中さん・幅木（高さ10cm以上）
+   - 作業床幅40cm以上、隙間3cm以下
+   - 昇降設備の設置（はしご・階段）
+   - 足場の点検表示・使用禁止表示
+   - 壁つなぎの設置状況
+
+3. 開口部・端部の防護措置
+   - 手すり・覆い・安全ネットの設置
+   - 開口部の蓋（固定されているか）
+   - 注意喚起表示・立入禁止表示
+   - 端部からの墜落防止措置
+
+4. 重機・クレーン作業の安全対策
+   - 立入禁止区域の設定・表示
+   - 誘導員の配置
+   - アウトリガーの完全張出し
+   - 吊り荷の下への立入禁止
+   - 作業半径内の安全確保
+
+5. 電気工事の安全措置
+   - 絶縁用保護具の使用
+   - 接地（アース）の実施
+   - 「送電禁止」「作業中」表示
+   - 漏電遮断器の設置
+   - 仮設電気設備の適正管理
+
+6. 火気使用作業の安全対策
+   - 消火器の配置（作業箇所から5m以内）
+   - 火花養生シートの設置
+   - 火気監視人の配置
+   - 可燃物の除去・隔離
+   - 作業後の残火確認
+
+7. 仮設設備の安全性
+   - 仮設電気設備の適正配線
+   - 照明の確保（通路・作業場所）
+   - 仮設通路の幅・勾配
+   - 仮設階段の手すり・滑り止め
+   - 仮設トイレ・休憩所の衛生
+
+8. 整理整頓・通路確保・表示類
+   - 5S活動の実施状況
+   - 通路幅の確保（60cm以上）
+   - 資材の整理・積み方
+   - 安全標識・誘導表示の設置
+   - 廃棄物の分別・適正保管
+
+9. 第三者災害防止措置
+   - 仮囲いの設置・維持管理
+   - 誘導員の配置（出入口）
+   - 注意看板・工事案内の掲示
+   - 飛散防止ネット・養生
+   - 歩行者通路の確保・照明
+
+【回答形式】以下のJSON形式で回答してください:
+{
+  "overallScore": 0から100の数値,
+  "overallJudgment": "適合" または "要改善" または "危険",
+  "summary": "全体の総評（2-3文）",
+  "categories": [
+    {
+      "id": 1から9の数値,
+      "name": "カテゴリ名",
+      "status": "ok" または "warn" または "danger" または "na",
+      "findings": "具体的な所見",
+      "recommendation": "改善提案（該当する場合）"
+    }
+  ],
+  "immediateActions": ["即座に対応が必要な事項のリスト"],
+  "positivePoints": ["良好な点のリスト"]
+}
+
+【注意事項】
+- Amazon工事安全ルールブック2025の基準に照らして評価してください
+- 写真に写っている範囲のみを評価してください
+- 写真から判断できない項目は "na"（判定不可）としてください
+- 具体的な根拠を示して評価してください
+- 改善提案は実行可能な具体的内容にしてください
+- スコアは厳格に: 重大な違反があれば大幅減点してください`;
+    }
+
+    // ===== 結果表示 =====
+    function displayResults(data) {
+        const area = document.getElementById('resultArea');
+        area.style.display = 'block';
+
+        if (data.raw_response) {
+            area.innerHTML = `<div class="card"><div class="result-body">${escapeHtml(data.raw_response)}</div></div>`;
+            return;
+        }
+
+        let html = '';
+
+        // スコア表示
+        const scoreClass = (data.overallScore || 0) >= 70 ? '' : 'caution';
+        html += `
+            <div class="summary-score ${scoreClass}">
+                <div class="score-number">${data.overallScore || '?'}<span style="font-size:20px">/100</span></div>
+                <div class="score-label">${data.overallJudgment || '評価完了'}</div>
+            </div>`;
+
+        // 総評
+        if (data.summary) {
+            html += `<div class="result-card info">
+                <div class="result-header">📝 総評</div>
+                <div class="result-body">${escapeHtml(data.summary)}</div>
+            </div>`;
+        }
+
+        // 即座に対応が必要な事項
+        if (data.immediateActions && data.immediateActions.length > 0) {
+            html += `<div class="result-card danger">
+                <div class="result-header">🚨 即時対応が必要</div>
+                <div class="result-body"><ul>${data.immediateActions.map(a => `<li>${escapeHtml(a)}</li>`).join('')}</ul></div>
+            </div>`;
+        }
+
+        // 良好な点
+        if (data.positivePoints && data.positivePoints.length > 0) {
+            html += `<div class="result-card">
+                <div class="result-header">✅ 良好な点</div>
+                <div class="result-body"><ul>${data.positivePoints.map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul></div>
+            </div>`;
+        }
+
+        // カテゴリ別結果
+        if (data.categories && data.categories.length > 0) {
+            html += '<div style="margin-top:12px;margin-bottom:8px"><strong style="font-size:14px">📊 カテゴリ別評価</strong></div>';
+            data.categories.forEach(cat => {
+                const statusMap = { ok: '', warn: 'warn', danger: 'danger', na: 'info' };
+                const iconMap = { ok: '✅', warn: '⚠️', danger: '❌', na: 'ℹ️' };
+                const cardClass = statusMap[cat.status] || '';
+                const icon = iconMap[cat.status] || '📋';
+                html += `<div class="result-card ${cardClass}">
+                    <div class="result-header">${icon} ${cat.id}. ${escapeHtml(cat.name)}</div>
+                    <div class="result-body">
+                        ${cat.findings ? '<p>' + escapeHtml(cat.findings) + '</p>' : ''}
+                        ${cat.recommendation ? '<p style="margin-top:6px;color:#2d3748"><strong>→ </strong>' + escapeHtml(cat.recommendation) + '</p>' : ''}
+                    </div>
+                </div>`;
+            });
+        }
+
+        area.innerHTML = html;
+        area.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    // ===== 初期化 =====
+    window.addEventListener('DOMContentLoaded', () => {
+        loadConfig();
+        updateCheckButton();
+    });
+    </script>
+</body>
+</html>
